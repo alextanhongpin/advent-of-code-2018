@@ -41,9 +41,6 @@ fn reaction(input: &str) -> usize {
             },
             None => break,
         }
-        if input.len() == 0 {
-            break;
-        }
     }
 
     stack.len()
