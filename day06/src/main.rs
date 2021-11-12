@@ -20,7 +20,8 @@ impl Position {
 
 fn main() {
     let input = include_str!("input.txt");
-    assert_eq!(0, part1(input));
+    assert_eq!(4011, part1(input));
+    assert_eq!(46054, part2(input, 10_000));
 }
 
 fn part1(input: &str) -> i32 {
@@ -38,7 +39,7 @@ fn part1(input: &str) -> i32 {
             let distances = positions
                 .iter()
                 .enumerate()
-                .map(|(i, pos)| (i, dot.manhattan_distance(&pos)))
+                .map(|(i, pos)| (i, dot.manhattan_distance(pos)))
                 .collect::<Vec<(usize, i32)>>();
             let &(idx, min_distance) = distances.iter().min_by_key(|t| t.1).unwrap();
             let num_occurences = distances
@@ -73,6 +74,31 @@ fn part1(input: &str) -> i32 {
     map.into_iter().max_by_key(|t| t.1).unwrap().1
 }
 
+fn part2(input: &str, max_distance: i32) -> i32 {
+    let positions = input.trim().lines().map(Position::from).collect::<Vec<_>>();
+
+    let max_x = positions.iter().max_by_key(|p| p.0).unwrap().0;
+    let min_x = positions.iter().min_by_key(|p| p.0).unwrap().0;
+    let max_y = positions.iter().max_by_key(|p| p.1).unwrap().1;
+    let min_y = positions.iter().min_by_key(|p| p.1).unwrap().1;
+
+    let mut count = 0;
+    for x in min_x..max_x {
+        for y in min_y..max_y {
+            let dot = Position(x, y);
+            let total_distance = positions
+                .iter()
+                .map(|pos| pos.manhattan_distance(&dot))
+                .sum::<i32>();
+            if total_distance < max_distance {
+                count += 1;
+            }
+        }
+    }
+
+    count
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -91,6 +117,17 @@ mod tests {
 3, 4
 5, 5
 8, 9";
-        assert_eq!(17, part1(&input));
+        assert_eq!(17, part1(input));
+    }
+
+    #[test]
+    fn test_part2() {
+        let input = "1, 1
+1, 6
+8, 3
+3, 4
+5, 5
+8, 9";
+        assert_eq!(16, part2(input, 32));
     }
 }
