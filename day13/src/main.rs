@@ -9,7 +9,7 @@ fn main() {
     let input = include_str!("input.txt");
     let map = parse(&input);
     assert_eq!((53, 133), find_crash_point(&map, false));
-    assert_eq!((48, 114), find_crash_point(&map, true));
+    assert_eq!((111, 68), find_crash_point(&map, true));
 }
 
 fn draw(carts: &Vec<(Position, Track, usize)>, paths: &HashMap<Position, Track>) {
@@ -45,16 +45,11 @@ fn find_crash_point(map: &Vec<Map>, remove_cart_on_crashed: bool) -> Position {
         carts_to_move.sort_by_key(|(pos, _, _)| (pos.1, pos.0));
         carts.clear();
 
-        //let mut crash_point: HashSet<Position> = HashSet::new();
-        let mut crash_point: HashSet<Position> = HashSet::from_iter(
-            carts_to_move
-                .clone()
-                .into_iter()
-                .map(|(pos, _, _)| pos)
-                .into_iter(),
-        );
-
+        let mut crash_point: HashSet<Position> = HashSet::new();
         for (pos, cart, count) in carts_to_move.clone() {
+            if crash_point.contains(&pos) {
+                continue;
+            }
             let new_pos = match cart {
                 '^' => (pos.0, pos.1 - 1),
                 'v' => (pos.0, pos.1 + 1),
@@ -63,10 +58,10 @@ fn find_crash_point(map: &Vec<Map>, remove_cart_on_crashed: bool) -> Position {
                 _ => panic!("Unknown cart type: {:?}", cart),
             };
 
-            crash_point.remove(&pos);
             if crash_point.contains(&new_pos) {
                 if remove_cart_on_crashed {
                     carts.retain(|&(pos, _, _)| pos != new_pos);
+                    continue;
                 } else {
                     return new_pos;
                 }
@@ -116,9 +111,7 @@ fn find_crash_point(map: &Vec<Map>, remove_cart_on_crashed: bool) -> Position {
                 _ => count,
             };
 
-            if !crash_point.contains(&new_pos) {
-                carts.push((new_pos, new_dir, count));
-            }
+            carts.push((new_pos, new_dir, count));
             crash_point.insert(new_pos);
         }
         if carts.len() == 1 {
