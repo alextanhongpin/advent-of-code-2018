@@ -4,6 +4,17 @@ type Position = (i32, i32);
 fn main() {
     let input = include_str!("input.txt");
     assert_eq!(215168, Grid::new(&input).play());
+    assert_eq!(52374, play_for_elf(&input));
+}
+
+fn play_for_elf(input: &str) -> i32 {
+    let mut elf_power = 4;
+    loop {
+        match Grid::new_with_elf_power(&input, elf_power).play_for_elf() {
+            Some(score) => return score,
+            None => elf_power += 1,
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -11,6 +22,7 @@ struct Grid {
     players: Vec<(Position, char, i32)>,
     walls: HashSet<Position>,
     round: i32,
+    elf_power: i32,
 }
 
 impl Grid {
@@ -32,20 +44,54 @@ impl Grid {
             players: players,
             walls: walls,
             round: 0,
+            elf_power: 3,
+        }
+    }
+
+    fn new_with_elf_power(input: &str, elf_power: i32) -> Self {
+        let mut grid = Grid::new(input);
+        grid.elf_power = elf_power;
+        grid
+    }
+
+    fn play_for_elf(&mut self) -> Option<i32> {
+        let num_elves = self.players.iter().filter(|&&(_, ch, _)| ch == 'E').count();
+        loop {
+            match self.round() {
+                Some(winner) => {
+                    let remaining_elves = self
+                        .players
+                        .iter()
+                        .filter(|&&(_, ch, health)| ch == 'E' && health > 0)
+                        .count();
+                    if remaining_elves != num_elves {
+                        return None;
+                    }
+                    println!(
+                        "wins at round: {} with HP {} with attack power {}",
+                        self.round,
+                        self.total_hit_points(),
+                        self.elf_power
+                    );
+                    return Some(self.round * self.total_hit_points());
+                }
+                None => (),
+            }
         }
     }
 
     fn play(&mut self) -> i32 {
         loop {
-            let end = self.round();
-            if end {
-                println!(
-                    "wins at round: {} with HP {}, players remaining: {:?}",
-                    self.round,
-                    self.total_hit_points(),
-                    self.players
-                );
-                return self.round * self.total_hit_points();
+            match self.round() {
+                Some(_) => {
+                    println!(
+                        "wins at round: {} with HP {}",
+                        self.round,
+                        self.total_hit_points(),
+                    );
+                    return self.round * self.total_hit_points();
+                }
+                None => (),
             }
         }
     }
@@ -58,7 +104,7 @@ impl Grid {
             .sum::<i32>()
     }
 
-    fn round(&mut self) -> bool {
+    fn round(&mut self) -> Option<char> {
         self.players = self.filter_alive(&self.players);
         self.sort_by_read_order();
 
@@ -72,7 +118,7 @@ impl Grid {
             let obstacles = self.build_obstacles(&alive);
             let enemies = self.find_targets(&alive, player);
             if enemies.is_empty() {
-                return true;
+                return Some(player);
             }
 
             // Attack.
@@ -94,7 +140,10 @@ impl Grid {
                         .into_iter()
                         .position(|&(pos, _, _)| pos == enemy)
                         .unwrap();
-                    self.players[j].2 -= 3;
+                    self.players[j].2 -= self.get_attack(player);
+                    if player == 'G' && self.players[j].2 <= 0 && self.elf_power > 3 {
+                        return Some('G');
+                    }
                     continue;
                 }
                 None => {}
@@ -159,7 +208,11 @@ impl Grid {
                         .into_iter()
                         .position(|&(pos, _, _)| pos == enemy)
                         .unwrap();
-                    self.players[j].2 -= 3;
+                    self.players[j].2 -= self.get_attack(player);
+                    // Quick hack to exit early when the elf is dead.
+                    if player == 'G' && self.players[j].2 <= 0 && self.elf_power > 3 {
+                        return Some('G');
+                    }
                 }
                 None => {}
             }
@@ -167,7 +220,14 @@ impl Grid {
 
         self.round += 1;
         //self.draw();
-        false
+        None
+    }
+
+    fn get_attack(&self, player: char) -> i32 {
+        match player {
+            'E' => self.elf_power,
+            _ => 3,
+        }
     }
 
     fn draw(&self) {
@@ -328,41 +388,6 @@ fn parse(input: &str) -> Vec<(Position, char)> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[test]
-    fn test_best_move() {
-        let input = "#######
-#E..G.#
-#...#.#
-#.G.#G#
-#######";
-        let tiles = parse(&input);
-        let players = tiles
-            .iter()
-            .filter(|&(_, ch)| *ch != '#')
-            .map(|&(pos, ch)| (pos, ch, 200))
-            .collect::<Vec<(Position, char, i32)>>();
-
-        // Include only walls.
-        let mut walls: HashSet<Position> = HashSet::from_iter(
-            tiles
-                .iter()
-                .filter(|&(_, ch)| *ch == '#')
-                .map(|&(pos, _)| pos),
-        );
-
-        let mut all_tiles = players.clone();
-        for &wall in walls.iter() {
-            all_tiles.push((wall, '#', 999));
-        }
-        draw(&all_tiles);
-
-        for (pos, _, _) in players {
-            walls.insert(pos.clone());
-        }
-        assert_eq!(Some(((2, 1), 3)), best_move(&walls, &(1, 1), &(4, 1)));
-        assert_eq!(Some(((2, 1), 3)), best_move(&walls, &(1, 1), &(2, 3)));
-        assert_eq!(None, best_move(&walls, &(1, 1), &(5, 3)));
-    }
 
     #[test]
     fn test_move() {
@@ -375,9 +400,6 @@ mod tests {
 #.......#
 #G..G..G#
 #########";
-        let tiles = parse(&input);
-        let score = play(&tiles);
-        assert_eq!(27828, score);
         assert_eq!(27828, Grid::new(&input).play());
     }
 
@@ -390,9 +412,6 @@ mod tests {
 #..G#E#
 #.....#
 #######";
-        let tiles = parse(&input);
-        let score = play(&tiles);
-        assert_eq!(27730, score);
         assert_eq!(27730, Grid::new(&input).play());
 
         let input = "#######
@@ -403,9 +422,6 @@ mod tests {
 #...E.#
 #######";
 
-        let tiles = parse(&input);
-        let score = play(&tiles);
-        assert_eq!(36334, score);
         assert_eq!(36334, Grid::new(&input).play());
 
         let input = "#######
@@ -416,9 +432,6 @@ mod tests {
 #..E#.#
 #######";
 
-        let tiles = parse(&input);
-        let score = play(&tiles);
-        assert_eq!(39514, score);
         assert_eq!(39514, Grid::new(&input).play());
 
         let input = "
@@ -430,9 +443,6 @@ mod tests {
 #...E.#
 #######";
 
-        let tiles = parse(&input);
-        let score = play(&tiles);
-        assert_eq!(27755, score);
         assert_eq!(27755, Grid::new(&input).play());
 
         let input = "
@@ -446,9 +456,41 @@ mod tests {
 #.....G.#
 #########";
 
-        let tiles = parse(&input);
-        let score = play(&tiles);
-        assert_eq!(18740, score);
         assert_eq!(18740, Grid::new(&input).play());
+    }
+
+    #[test]
+    fn test_play_part2() {
+        let input = "#######
+#.G...#
+#...EG#
+#.#.#G#
+#..G#E#
+#.....#
+#######";
+        assert_eq!(4988, play_for_elf(&input));
+
+        let input = "#######
+        #E..EG#
+        #.#G.E#
+        #E.##E#
+        #G..#.#
+        #..E#.#
+        #######";
+
+        assert_eq!(31284, play_for_elf(&input));
+
+        let input = "
+        #########
+        #G......#
+        #.E.#...#
+        #..##..G#
+        #...##..#
+        #...#...#
+        #.G...G.#
+        #.....G.#
+        #########";
+
+        assert_eq!(1140, play_for_elf(&input));
     }
 }
