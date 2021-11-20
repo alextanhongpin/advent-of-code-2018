@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 type Position = (i32, i32);
 
 fn main() {
@@ -7,6 +7,271 @@ fn main() {
     let score = play(&tiles);
     assert_eq!(215168, score);
     //assert_eq!(52122);
+}
+
+#[derive(Debug)]
+struct Grid {
+    players: Vec<(Position, char, i32)>,
+    walls: HashSet<Position>,
+    round: i32,
+}
+
+impl Grid {
+    fn new(input: &str) -> Self {
+        let tiles = parse(&input);
+        let players = tiles
+            .iter()
+            .filter(|&(_, ch)| *ch != '#')
+            .map(|&(pos, ch)| (pos, ch, 200))
+            .collect::<Vec<(Position, char, i32)>>();
+
+        let walls: HashSet<Position> = HashSet::from_iter(
+            tiles
+                .iter()
+                .filter(|&(_, ch)| *ch == '#')
+                .map(|&(pos, _)| pos),
+        );
+        Grid {
+            players: players,
+            walls: walls,
+            round: 0,
+        }
+    }
+
+    fn play(&mut self) -> i32 {
+        loop {
+            let end = self.round();
+            if end {
+                return self.round * self.total_hit_points();
+            }
+        }
+    }
+
+    fn total_hit_points(&self) -> i32 {
+        self.players
+            .iter()
+            .map(|(_, _, health)| health)
+            .filter(|health| *health > &0)
+            .sum::<i32>()
+    }
+
+    fn round(&mut self) -> bool {
+        self.players = self.remove_dead_players(&self.players);
+        self.get_ordering_position();
+
+        for i in 0..self.players.len() {
+            let (pos, player, health) = self.players[i];
+            // Skip if player is dead during the previous turn.
+            if health <= 0 {
+                continue;
+            }
+            let players_alive = self.remove_dead_players(&self.players);
+            let obstacles = self.build_obstacles(&players_alive);
+            let enemies = self.find_targets(&players_alive, player);
+            if enemies.is_empty() {
+                return true;
+            }
+            let possible_moves = enemies.clone().into_iter().flat_map(|enemy| {
+                // Filter the best in-range move.
+                let in_range = self.find_in_range(&obstacles, &enemy);
+                in_range
+                    .into_iter()
+                    .flat_map(|pos_rng| {
+                        match self.find_shortest_distance(&obstacles, &pos, &pos_rng) {
+                            Some(dist) => Some((dist, enemy, pos_rng)),
+                            None => None,
+                        }
+                    })
+                    .min_by_key(|&(dist, _, pos)| (dist, pos.1, pos.0))
+            });
+            println!(
+                "possible_moves for {} {:?}",
+                player,
+                possible_moves.clone().collect::<Vec<_>>()
+            );
+            let possible_moves = possible_moves.min_by_key(|&(dist, origin, _)| {
+                (
+                    dist,
+                    self.find_player_health_at_position(&players_alive, &origin),
+                    origin.1,
+                    origin.0,
+                )
+            });
+
+            // Move.
+            match possible_moves {
+                Some((_, _, tgt_pos)) => {
+                    let in_range = self.find_in_range(&obstacles, &pos);
+                    println!(
+                        "player {} should move to {:?} from {:?} : {:?}",
+                        player, tgt_pos, pos, in_range
+                    );
+                    let best_move = in_range.into_iter().flat_map(|src_pos| {
+                        match self.find_shortest_distance(&obstacles, &src_pos, &tgt_pos) {
+                            Some(dist) => Some((dist, src_pos)),
+                            None => None,
+                        }
+                    });
+
+                    println!(
+                        "best_move for {} {:?}",
+                        player,
+                        best_move.clone().collect::<Vec<_>>()
+                    );
+
+                    let best_move = best_move.min_by_key(|&(dist, pos)| (dist, pos.1, pos.0));
+                    match best_move {
+                        Some((distance, new_move)) => {
+                            println!(
+                                "player {} should move to {:?} from {:?}, now thorugh {:?} with distance {}",
+                                player, tgt_pos, pos, new_move, distance
+                            );
+                            self.players[i].0 = new_move;
+                        }
+                        _ => {}
+                    }
+                }
+                None => {}
+            }
+
+            // Attack.
+            match enemies
+                .into_iter()
+                .filter(|enemy| manhattan_distance(&self.players[i].0, &enemy) == 1)
+                .min_by_key(|enemy| {
+                    (
+                        self.find_player_health_at_position(&players_alive, enemy),
+                        enemy.1,
+                        enemy.0,
+                    )
+                }) {
+                Some(enemy) => {
+                    let j = players_alive
+                        .into_iter()
+                        .position(|(pos, _, _)| pos == enemy)
+                        .unwrap();
+                    self.players[j].2 -= 3;
+                    println!(
+                        "round {} {} attacks {:?}, HP {:?}",
+                        self.round, player, enemy, self.players[j].2
+                    );
+                }
+                None => {}
+            }
+        }
+
+        self.round += 1;
+        if self.round > 3 {
+            println!("{:?}", self);
+            panic!("too many rounds")
+        }
+        self.draw();
+        false
+    }
+
+    fn draw(&self) {
+        println!("\nround {}", self.round);
+        let mut all_tiles = self.players.clone();
+        for &wall in self.walls.iter() {
+            all_tiles.push((wall, '#', 999));
+        }
+        draw(&all_tiles);
+    }
+
+    fn find_player_health_at_position(
+        &self,
+        players: &Vec<(Position, char, i32)>,
+        target: &Position,
+    ) -> i32 {
+        players
+            .iter()
+            .find(|(pos, _, _)| &pos == &target)
+            .unwrap()
+            .2
+    }
+
+    fn find_shortest_distance(
+        &self,
+        obstacles: &HashSet<Position>,
+        from: &Position,
+        to: &Position,
+    ) -> Option<i32> {
+        if from == to {
+            return Some(0);
+        }
+        if manhattan_distance(from, to) == 1 {
+            return Some(1);
+        }
+        let mut queue = vec![(*from, 0)];
+        let mut visited = HashSet::new();
+        visited.insert(*from);
+
+        while !queue.is_empty() {
+            let possible_moves = queue.clone();
+            queue.clear();
+
+            for (pos, dist) in possible_moves {
+                for &dir in &[(0, 1), (0, -1), (1, 0), (-1, 0)] {
+                    let new_pos = (pos.0 + dir.0, pos.1 + dir.1);
+                    if obstacles.contains(&new_pos) {
+                        continue;
+                    }
+                    if visited.contains(&new_pos) {
+                        continue;
+                    }
+                    visited.insert(new_pos);
+                    if new_pos == *to {
+                        return Some(dist + 1);
+                    }
+                    queue.push((new_pos, dist + 1));
+                }
+            }
+        }
+        None
+    }
+
+    fn find_in_range(&self, obstacles: &HashSet<Position>, pos: &Position) -> Vec<Position> {
+        vec![(0, 1), (0, -1), (1, 0), (-1, 0)]
+            .into_iter()
+            .map(|(dx, dy)| (pos.0 + dx, pos.1 + dy))
+            .filter(|&(x, y)| !obstacles.contains(&(x, y)))
+            .collect()
+    }
+
+    fn get_ordering_position(&mut self) {
+        self.players.sort_by_key(|(pos, _, _)| (pos.1, pos.0))
+    }
+
+    fn remove_dead_players(
+        &self,
+        players: &Vec<(Position, char, i32)>,
+    ) -> Vec<(Position, char, i32)> {
+        players
+            .clone()
+            .into_iter()
+            .filter(|(_, _, hp)| *hp > 0)
+            .collect()
+    }
+
+    fn find_targets(&self, players: &Vec<(Position, char, i32)>, player: char) -> Vec<Position> {
+        players
+            .iter()
+            .filter(|(_, ch, _)| *ch != player)
+            .map(|&(pos, _, _)| pos)
+            .collect()
+    }
+
+    fn build_obstacles(&self, players: &Vec<(Position, char, i32)>) -> HashSet<Position> {
+        let mut obstacles = self.walls.clone();
+        obstacles.extend(
+            players
+                .clone()
+                .into_iter()
+                .map(|(pos, _, _)| pos)
+                .collect::<Vec<Position>>(),
+        );
+        obstacles
+    }
 }
 
 fn play(tiles: &[(Position, char)]) -> i32 {
@@ -27,6 +292,8 @@ fn play(tiles: &[(Position, char)]) -> i32 {
 
     let mut round = 0;
     loop {
+        players.retain(|(_, _, health)| *health > 0);
+
         // Top to bottom, left to right.
         players.sort_by_key(|(pos, _, _)| (pos.1, pos.0));
         for i in 0..players.len() {
@@ -42,8 +309,10 @@ fn play(tiles: &[(Position, char)]) -> i32 {
 
             let mut obstacles = walls.clone();
             for &(other_position, _, _) in other_players.iter() {
-                obstacles.insert(other_position); // Other units are walls.
+                // All other units except the player is an obstacle.
+                obstacles.insert(other_position);
             }
+            obstacles.insert(position);
 
             // Only target enemies.
             other_players.retain(|&(_, target, _)| target != player);
@@ -75,18 +344,16 @@ fn play(tiles: &[(Position, char)]) -> i32 {
                 });
 
             match in_range {
-                Some((distance, enemy_position, best_move, _)) => {
+                Some((_, enemy_position, best_move, _)) => {
                     // Move.
-                    if distance > 0 {
-                        players[i].0 = best_move;
-                    }
+                    players[i].0 = best_move;
                     //println!(
                     //"Player {} moves from {:?} to {:?} through {:?} with distance {}",
                     //player, position, enemy_position, best_move, distance,
                     //);
 
                     // Attack.
-                    if distance == 1 || distance == 2 {
+                    if manhattan_distance(&players[i].0, &enemy_position) == 1 {
                         //println!("attacking player");
                         let j = players
                             .iter()
@@ -98,16 +365,15 @@ fn play(tiles: &[(Position, char)]) -> i32 {
                 None => {}
             }
         }
-        players.retain(|(_, _, health)| *health > 0);
         round += 1;
-        //println!("\nround {}", round);
-        //let mut all_tiles = players.clone();
-        //for &wall in walls.iter() {
-        //all_tiles.push((wall, '#', 999));
-        //}
-        //draw(&all_tiles);
+        println!("\nround {}", round);
+        let mut all_tiles = players.clone();
+        for &wall in walls.iter() {
+            all_tiles.push((wall, '#', 999));
+        }
+        draw(&all_tiles);
         //if round > 2 {
-        ////panic!("too high");
+        //panic!("too high");
         //}
     }
 }
@@ -121,16 +387,30 @@ fn draw(tiles: &[(Position, char, i32)]) {
     let max_y = tiles.iter().map(|(p, _, _)| p.1).max().unwrap();
 
     let mut grid = vec![vec!['.'; max_x as usize + 1]; max_y as usize + 1];
+    let mut units = HashMap::new();
 
     for (p, c, health) in tiles {
         grid[p.1 as usize][p.0 as usize] = *c;
-        if *c != '#' {
-            println!("{} at {:?} (HP: {})", c, p, health);
+        if *c != '#' && *health > 0 {
+            //println!("{} at {:?} (HP: {})", c, p, health);
+            units.entry(p.1).or_insert(Vec::new()).push((p, c, health));
         }
     }
 
-    for row in grid {
-        println!("{}", row.iter().collect::<String>());
+    for (y, row) in grid.into_iter().enumerate() {
+        let meta = match units.get(&(y as i32)) {
+            Some(cols) => {
+                let mut cols = cols.clone();
+                cols.sort_by_key(|&(p, _, _)| p.0);
+                let meta = cols
+                    .iter()
+                    .map(|&(p, c, health)| format!("{} at {:?} (HP: {})", c, p, health))
+                    .collect::<Vec<String>>();
+                meta.join(", ")
+            }
+            None => "".to_string(),
+        };
+        println!("{} {}", row.iter().collect::<String>(), meta);
     }
 }
 
@@ -226,7 +506,7 @@ fn best_move(
                 .min_by_key(|paths| {
                     let position = paths.iter().nth(1).unwrap().0;
                     let distance = paths.iter().last().unwrap().1;
-                    (distance, position.1, position.0)
+                    (distance + 1, position.1, position.0)
                 })
                 .unwrap();
             Some((
@@ -288,6 +568,7 @@ mod tests {
 #.......#
 #G..G..G#
 #########";
+        assert_eq!(27828, Grid::new(&input).play());
         let tiles = parse(&input);
         let score = play(&tiles);
         assert_eq!(27828, score);
@@ -304,6 +585,7 @@ mod tests {
 #######";
         let tiles = parse(&input);
         let score = play(&tiles);
+        //assert_eq!(27730, Grid::new(&input).play());
         assert_eq!(27730, score);
 
         let input = "#######
