@@ -8,7 +8,8 @@ fn main() {
     game.simulate();
     game.draw();
 
-    assert_eq!(0, game.drops.union(&game.water).count());
+    assert_eq!(27042, game.drops.union(&game.water).count());
+    assert_eq!(0, game.water.len());
 }
 
 #[derive(Debug)]
@@ -71,7 +72,7 @@ impl Game {
         let max_x = self.tiles.iter().map(|(x, _)| *x).max().unwrap();
         let max_y = self.tiles.iter().map(|(_, y)| *y).max().unwrap();
         for y in 0..=max_y {
-            for x in min_x..=max_x {
+            for x in min_x - 1..=max_x {
                 if x == 500 && y == 0 {
                     print!("+");
                 } else if self.tiles.contains(&(x, y)) {
@@ -90,6 +91,7 @@ impl Game {
     }
 
     fn simulate(&mut self) {
+        let min_y = self.tiles.iter().map(|(_, y)| *y).min().unwrap();
         let max_y = self.tiles.iter().map(|(_, y)| *y).max().unwrap();
         while !self.last_drops.is_empty() {
             let drop = self.last_drops.pop().unwrap();
@@ -107,15 +109,15 @@ impl Game {
                 self.overflow(&drop);
             }
         }
+        self.drops
+            .retain(|&drop| !self.water.contains(&drop) && drop.1 >= min_y && drop.1 <= max_y);
+        self.water
+            .retain(|&drop| drop.1 >= min_y && drop.1 <= max_y);
     }
 
     fn can_drip(&self, drop: &Position) -> bool {
         let next_drop = (drop.0, drop.1 + 1);
-        if self.tiles.contains(&next_drop) || self.water.contains(&next_drop) {
-            false
-        } else {
-            true
-        }
+        !self.is_tile(&next_drop) && !self.is_water(&next_drop)
     }
 
     fn drip(&mut self, drop: &Position) {
@@ -128,11 +130,11 @@ impl Game {
         let mut left = drop.clone();
         loop {
             left.0 -= 1;
-            if self.tiles.contains(&left) {
+            if self.is_tile(&left) {
                 break;
             }
             let bottom = (left.0, left.1 + 1);
-            if !(self.tiles.contains(&bottom) || self.water.contains(&bottom)) {
+            if !(self.is_tile(&bottom) || self.is_water(&bottom)) {
                 return false;
             }
         }
@@ -143,7 +145,7 @@ impl Game {
                 return true;
             }
             let bottom = (right.0, right.1 + 1);
-            if !(self.tiles.contains(&bottom) || self.water.contains(&bottom)) {
+            if !(self.is_tile(&bottom) || self.is_water(&bottom)) {
                 return false;
             }
         }
@@ -154,33 +156,44 @@ impl Game {
         self.water.insert(drop.clone());
         let mut left = drop.clone();
         loop {
+            self.drops.remove(&left);
             left.0 -= 1;
-            if self.tiles.contains(&left) {
+            if self.is_tile(&left) {
                 break;
             }
             self.water.insert(left);
         }
         let mut right = drop.clone();
         loop {
+            self.drops.remove(&right);
             right.0 += 1;
-            if self.tiles.contains(&right) {
+            if self.is_tile(&right) {
                 break;
             }
             self.water.insert(right);
         }
     }
 
+    fn is_tile(&self, pos: &Position) -> bool {
+        self.tiles.contains(pos)
+    }
+
+    fn is_water(&self, pos: &Position) -> bool {
+        self.water.contains(pos)
+    }
+
     fn overflow(&mut self, drop: &Position) {
         let mut left = drop.clone();
-        self.drops.insert(drop.clone());
+        self.drops.insert(left);
         loop {
             left.0 -= 1;
-            if self.tiles.contains(&left) {
+            if self.is_tile(&left) {
                 break;
             }
             self.drops.insert(left);
             let bottom = (left.0, left.1 + 1);
-            if !(self.tiles.contains(&bottom) || self.water.contains(&bottom)) {
+            if !self.is_tile(&bottom) && !self.is_water(&bottom) {
+                self.drops.insert(left);
                 self.last_drops.push(left);
                 break;
             }
@@ -189,12 +202,13 @@ impl Game {
         let mut right = drop.clone();
         loop {
             right.0 += 1;
-            if self.tiles.contains(&right) {
+            if self.is_tile(&right) {
                 break;
             }
             self.drops.insert(right);
             let bottom = (right.0, right.1 + 1);
-            if !(self.tiles.contains(&bottom) || self.water.contains(&bottom)) {
+            if !self.is_tile(&bottom) && !self.is_water(&bottom) {
+                self.drops.insert(right);
                 self.last_drops.push(right);
                 break;
             }
@@ -220,6 +234,8 @@ y=13, x=498..504";
         let mut game = Game::new(input);
         game.simulate();
         game.draw();
+        assert_eq!(game.drops.len(), 28);
+        assert_eq!(game.water.len(), 29);
         assert_eq!(57, game.drops.union(&game.water).count());
     }
 }
