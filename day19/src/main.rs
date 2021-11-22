@@ -6,6 +6,11 @@ fn main() {
     let mut program = Program::new(input);
     program.run();
     assert_eq!(1228, program.register[0]);
+
+    // Not sure how this relates to part 2, but it works.
+    let p = 10551267;
+    let result = p + (1..=p / 2).filter(|x| p % x == 0).sum::<u32>();
+    assert_eq!(15285504, result);
 }
 
 #[derive(Debug)]
@@ -19,16 +24,15 @@ struct Program {
 impl Program {
     fn new(input: &str) -> Self {
         let lines = input.trim().lines().collect::<Vec<&str>>();
-        let ip = lines
-            .get(0)
-            .unwrap()
-            .replace("#ip", "")
-            .trim()
-            .parse::<usize>()
-            .unwrap();
         Program {
             ip: 0,
-            bound_ip: ip,
+            bound_ip: lines
+                .get(0)
+                .unwrap()
+                .replace("#ip", "")
+                .trim()
+                .parse::<usize>()
+                .unwrap(),
             register: [0; 6],
             instructions: lines
                 .into_iter()
@@ -54,11 +58,13 @@ impl Program {
     }
 
     fn run(&mut self) {
+        let mut iter = 0;
         while self.ip < self.instructions.len() {
             let mut register = self.register;
             register[self.bound_ip] = self.ip;
             let (opcode, args) = self.instructions.get(self.ip).unwrap();
 
+            iter += 1;
             let new_register = match opcode.as_str() {
                 "addr" => addr(args, &register),
                 "addi" => addi(args, &register),
