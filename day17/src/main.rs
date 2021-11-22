@@ -4,7 +4,7 @@ type Position = (i32, i32);
 
 fn main() {
     let input = include_str!("input.txt");
-    let mut game = Game::new(&input);
+    let mut game = Game::new(input);
     game.simulate();
     game.draw();
 
@@ -25,8 +25,8 @@ impl Game {
         let mut tiles = HashSet::new();
         for line in input.trim().lines() {
             let mut parts = line.trim().split(',').map(str::trim).collect::<Vec<&str>>();
-            parts.sort();
-            let x_part = parts.iter().next().unwrap().split('=').last().unwrap();
+            parts.sort_unstable();
+            let x_part = parts.get(0).unwrap().split('=').last().unwrap();
             let y_part = parts.iter().last().unwrap().split('=').last().unwrap();
 
             if x_part.contains("..") {
@@ -60,7 +60,7 @@ impl Game {
         }
 
         Game {
-            tiles: tiles,
+            tiles,
             drops: HashSet::new(),
             water: HashSet::new(),
             last_drops: vec![(500, 0)],
@@ -127,7 +127,7 @@ impl Game {
     }
 
     fn can_fill(&mut self, drop: &Position) -> bool {
-        let mut left = drop.clone();
+        let mut left = *drop;
         loop {
             left.0 -= 1;
             if self.is_tile(&left) {
@@ -138,7 +138,7 @@ impl Game {
                 return false;
             }
         }
-        let mut right = drop.clone();
+        let mut right = *drop;
         loop {
             right.0 += 1;
             if self.tiles.contains(&right) {
@@ -153,8 +153,8 @@ impl Game {
 
     fn fill(&mut self, drop: &Position) {
         self.last_drops.push((drop.0, drop.1 - 1));
-        self.water.insert(drop.clone());
-        let mut left = drop.clone();
+        self.water.insert(*drop);
+        let mut left = *drop;
         loop {
             self.drops.remove(&left);
             left.0 -= 1;
@@ -163,7 +163,7 @@ impl Game {
             }
             self.water.insert(left);
         }
-        let mut right = drop.clone();
+        let mut right = *drop;
         loop {
             self.drops.remove(&right);
             right.0 += 1;
@@ -183,7 +183,7 @@ impl Game {
     }
 
     fn overflow(&mut self, drop: &Position) {
-        let mut left = drop.clone();
+        let mut left = *drop;
         self.drops.insert(left);
         loop {
             left.0 -= 1;
@@ -199,7 +199,7 @@ impl Game {
             }
         }
 
-        let mut right = drop.clone();
+        let mut right = *drop;
         loop {
             right.0 += 1;
             if self.is_tile(&right) {
