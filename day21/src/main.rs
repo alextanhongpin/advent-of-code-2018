@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 mod opcode;
 use opcode::*;
 
@@ -5,12 +6,7 @@ fn main() {
     let input = include_str!("input.txt");
     let mut program = Program::new(input);
     program.run();
-    assert_eq!(1228, program.register[0]);
-
-    // Not sure how this relates to part 2, but it works.
-    let p = 10551267;
-    let result = p + (1..=p / 2).filter(|x| p % x == 0).sum::<u32>();
-    assert_eq!(15285504, result);
+    println!("{:?}", program.register);
 }
 
 #[derive(Debug)]
@@ -58,7 +54,10 @@ impl Program {
     }
 
     fn run(&mut self) {
+        let mut seen = HashSet::new();
+        let mut iter = 0;
         while self.ip < self.instructions.len() {
+            iter += 1;
             let mut register = self.register;
             register[self.bound_ip] = self.ip;
             let (opcode, args) = self.instructions.get(self.ip).unwrap();
@@ -84,26 +83,28 @@ impl Program {
             };
             self.register = new_register;
             self.ip = self.register[self.bound_ip] + 1;
+
+            // This is the register that will cause the program to terminate.
+            // eqrr 3 0 5
+            if self.register[self.bound_ip] == 28 {
+                if seen.contains(&self.register[args[0]]) {
+                    println!("part2: {:?}", seen.iter().max().unwrap());
+                    break;
+                }
+                seen.insert(self.register[args[0]]);
+                //println!("part 1: {:?}", self.register[3] );
+                //break;
+            }
+            //println!("{:?} {:?} {:?} {:?}", opcode, args, self.ip, self.register);
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     #[test]
     fn it_works() {
-        let input = "#ip 0
-seti 5 0 1
-seti 6 0 2
-addi 0 1 0
-addr 1 2 3
-setr 1 0 0
-seti 8 0 4
-seti 9 0 5";
-        let mut program = Program::new(input);
-        program.run();
-        assert_eq!(6, program.register[0]);
+        let result = 2 + 2;
+        assert_eq!(result, 4);
     }
 }
