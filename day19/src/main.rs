@@ -1,6 +1,3 @@
-mod opcode;
-use opcode::*;
-
 fn main() {
     let input = include_str!("input.txt");
     let mut program = Program::new(input);
@@ -59,30 +56,30 @@ impl Program {
 
     fn run(&mut self) {
         while self.ip < self.instructions.len() {
-            let mut register = self.register;
-            register[self.bound_ip] = self.ip;
-            let (opcode, args) = self.instructions.get(self.ip).unwrap();
+            let mut reg = self.register;
+            reg[self.bound_ip] = self.ip;
+            let (opcode, [a, b, c]) = self.instructions.get(self.ip).unwrap().clone();
 
-            let new_register = match opcode.as_str() {
-                "addr" => addr(args, &register),
-                "addi" => addi(args, &register),
-                "mulr" => mulr(args, &register),
-                "muli" => muli(args, &register),
-                "banr" => banr(args, &register),
-                "bani" => bani(args, &register),
-                "borr" => borr(args, &register),
-                "bori" => bori(args, &register),
-                "setr" => setr(args, &register),
-                "seti" => seti(args, &register),
-                "gtir" => gtir(args, &register),
-                "gtri" => gtri(args, &register),
-                "gtrr" => gtrr(args, &register),
-                "eqir" => eqir(args, &register),
-                "eqri" => eqri(args, &register),
-                "eqrr" => eqrr(args, &register),
+            reg[c] = match opcode.as_str() {
+                "addr" => reg[a] + reg[b],
+                "addi" => reg[a] + b,
+                "mulr" => reg[a] * reg[b],
+                "muli" => reg[a] * b,
+                "banr" => reg[a] & reg[b],
+                "bani" => reg[a] & b,
+                "borr" => reg[a] | reg[b],
+                "bori" => reg[a] | b,
+                "setr" => reg[a],
+                "seti" => a,
+                "gtir" => (a > reg[b]) as usize,
+                "gtri" => (reg[a] > b) as usize,
+                "gtrr" => (reg[a] > reg[b]) as usize,
+                "eqir" => (a == reg[b]) as usize,
+                "eqri" => (reg[a] == b) as usize,
+                "eqrr" => (reg[a] == reg[b]) as usize,
                 _ => panic!("Unknown opcode: {}", opcode),
             };
-            self.register = new_register;
+            self.register = reg;
             self.ip = self.register[self.bound_ip] + 1;
         }
     }
