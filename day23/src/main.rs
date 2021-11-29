@@ -1,14 +1,12 @@
 use regex::Regex;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 fn main() {
     let input = include_str!("input.txt");
     let n = nanobots(input);
     let nanobot = n.iter().max_by_key(|bot| (bot.r)).unwrap();
     assert_eq!(674, in_range(&n, &nanobot));
-    // Too high.
-    //Nanobot { x: 20443518, y: 45034833, z: 68671021}}
-    assert_eq!(134149372, most_bots(&n));
+    assert_eq!(129444177, most_bots(&n));
 }
 
 fn in_range(n: &Vec<Nanobot>, nanobot: &Nanobot) -> i32 {
@@ -17,147 +15,74 @@ fn in_range(n: &Vec<Nanobot>, nanobot: &Nanobot) -> i32 {
         .count() as i32
 }
 
-fn scale_down(n: &Vec<Nanobot>) -> Vec<Nanobot> {
+fn scale_down(n: &Vec<Nanobot>, factor: i32) -> Vec<Nanobot> {
     n.into_iter()
         .map(|bot| {
             let mut bot = bot.clone();
-            bot.x /= 1e6 as i32;
-            bot.y /= 1e6 as i32;
-            bot.z /= 1e6 as i32;
-            bot.r /= 1e6 as i32;
+            bot.x /= factor;
+            bot.y /= factor;
+            bot.z /= factor;
+            bot.r /= factor;
             bot
         })
         .collect()
 }
 
-fn most_bots(n: &Vec<Nanobot>) -> i32 {
-    //let n = &scale_down(n);
-    let zero_bot = Nanobot {
-        x: 0,
-        y: 0,
-        z: 0,
-        r: 0,
-    };
-    let mut xs = HashSet::new();
-    let mut ys = HashSet::new();
-    let mut zs = HashSet::new();
-    let mut x_ranges = vec![];
-    let mut y_ranges = vec![];
-    let mut z_ranges = vec![];
+fn most_bots(bots: &Vec<Nanobot>) -> i32 {
+    let mut factor = 1e7 as i32;
 
-    for bot in n {
-        xs.insert(bot.x);
-        xs.insert(bot.x - bot.r);
-        xs.insert(bot.x + bot.r);
-        x_ranges.push((bot.x - bot.r, bot.x + bot.r));
+    let mut min_x = bots.iter().map(|bot| bot.x).min().unwrap() / factor;
+    let mut max_x = bots.iter().map(|bot| bot.x).max().unwrap() / factor;
+    let mut min_y = bots.iter().map(|bot| bot.y).min().unwrap() / factor;
+    let mut max_y = bots.iter().map(|bot| bot.y).max().unwrap() / factor;
+    let mut min_z = bots.iter().map(|bot| bot.z).min().unwrap() / factor;
+    let mut max_z = bots.iter().map(|bot| bot.z).max().unwrap() / factor;
+    let mut nearest_bot = (
+        Nanobot {
+            x: 0,
+            y: 0,
+            z: 0,
+            r: 0,
+        },
+        0,
+    );
 
-        ys.insert(bot.y);
-        ys.insert(bot.y - bot.r);
-        ys.insert(bot.y + bot.r);
-        y_ranges.push((bot.y - bot.r, bot.y + bot.r));
+    while factor != 0 {
+        let n = &scale_down(bots, factor);
+        let mut counter = HashMap::new();
 
-        zs.insert(bot.z);
-        zs.insert(bot.z - bot.r);
-        zs.insert(bot.z + bot.r);
-        z_ranges.push((bot.z - bot.r, bot.z + bot.r));
-    }
-    let mut x_count = HashMap::new();
-    for x in xs.clone() {
-        for (min, max) in x_ranges.iter() {
-            if x >= *min && x <= *max {
-                *x_count.entry(x).or_insert(0) += 1;
-            }
-        }
-    }
-    let mut y_count = HashMap::new();
-    for y in ys.clone() {
-        for (min, max) in y_ranges.iter() {
-            if y >= *min && y <= *max {
-                *y_count.entry(y).or_insert(0) += 1;
-            }
-        }
-    }
-    let mut z_count = HashMap::new();
-    for z in zs.clone() {
-        for (min, max) in z_ranges.iter() {
-            if z >= *min && z <= *max {
-                *z_count.entry(z).or_insert(0) += 1;
-            }
-        }
-    }
-    let min_x = x_count
-        .iter()
-        .max_by_key(|(x, count)| (*count, -*x))
-        .unwrap()
-        .0;
-    let max_x = x_count
-        .iter()
-        .max_by_key(|(x, count)| (*count, *x))
-        .unwrap()
-        .0;
-    let min_y = y_count
-        .iter()
-        .max_by_key(|(y, count)| (*count, -*y))
-        .unwrap()
-        .0;
-    let max_y = y_count
-        .iter()
-        .max_by_key(|(y, count)| (*count, *y))
-        .unwrap()
-        .0;
-    let min_z = z_count
-        .iter()
-        .max_by_key(|(z, count)| (*count, -*z))
-        .unwrap()
-        .0;
-    let max_z = z_count
-        .iter()
-        .max_by_key(|(z, count)| (*count, *z))
-        .unwrap()
-        .0;
-
-    let xs = xs
-        .into_iter()
-        .filter(|x| x >= min_x && x <= max_x)
-        .collect::<Vec<i32>>();
-    let ys = ys
-        .into_iter()
-        .filter(|y| y >= min_y && y <= max_y)
-        .collect::<Vec<i32>>();
-    let zs = zs
-        .into_iter()
-        .filter(|z| z >= min_z && z <= max_z)
-        .collect::<Vec<i32>>();
-
-    let mut counter = HashMap::new();
-    for x in xs {
-        for y in ys.clone() {
-            for z in zs.clone() {
-                for bot in n.iter() {
-                    let pos = Nanobot {
-                        x: x,
-                        y: y,
-                        z: z,
-                        r: 0,
-                    };
-                    if pos.distance(&bot) <= bot.r {
-                        *counter.entry(pos).or_insert(0) += 1;
+        for x in min_x..=max_x {
+            for y in min_y..=max_y {
+                for z in min_z..=max_z {
+                    for bot in n.iter() {
+                        let pos = Nanobot { x, y, z, r: 0 };
+                        if bot.distance(&pos) <= bot.r {
+                            *counter.entry(pos).or_insert(0) += 1;
+                        }
                     }
                 }
             }
         }
+
+        nearest_bot = counter
+            .into_iter()
+            .max_by(|a, b| match a.1.cmp(&b.1) {
+                std::cmp::Ordering::Equal => a.0.from_origin().cmp(&b.0.from_origin()),
+                other => other,
+            })
+            .unwrap()
+            .clone();
+        println!("factor: {}, nearest_bot: {:?}", factor, nearest_bot);
+        min_x = (nearest_bot.0.x - 1) * 10;
+        max_x = (nearest_bot.0.x + 1) * 10;
+        min_y = (nearest_bot.0.y - 1) * 10;
+        max_y = (nearest_bot.0.y + 1) * 10;
+        min_z = (nearest_bot.0.z - 1) * 10;
+        max_z = (nearest_bot.0.z + 1) * 10;
+        factor /= 10;
     }
 
-    let nearest_bot = counter
-        .into_iter()
-        .max_by(|a, b| match a.1.cmp(&b.1) {
-            std::cmp::Ordering::Equal => a.0.distance(&zero_bot).cmp(&b.0.distance(&zero_bot)),
-            other => other,
-        })
-        .unwrap()
-        .0;
-    println!("{:?}", nearest_bot);
-    nearest_bot.distance(&zero_bot)
+    nearest_bot.0.from_origin()
 }
 
 #[derive(Debug, Clone, Copy, Hash, Eq, PartialEq)]
@@ -185,6 +110,10 @@ impl From<&str> for Nanobot {
 impl Nanobot {
     fn distance(&self, other: &Nanobot) -> i32 {
         (self.x - other.x).abs() + (self.y - other.y).abs() + (self.z - other.z).abs()
+    }
+
+    fn from_origin(&self) -> i32 {
+        self.x.abs() + self.y.abs() + self.z.abs()
     }
 }
 
