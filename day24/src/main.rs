@@ -40,11 +40,11 @@ impl Group {
         self.effective_power() * self.effectiveness(other)
     }
 
-    fn attack(&mut self, other: &mut Group) {
-        let damage = self.calculate_damage(other);
-        let units = damage / other.hit_points;
-        other.units = (other.units - units).max(0);
-    }
+    //fn attack(&mut self, other: &mut Group) {
+    //let damage = self.calculate_damage(other);
+    //let units = damage / other.hit_points;
+    //other.units = (other.units - units).max(0);
+    //}
 }
 
 struct System {
@@ -78,11 +78,11 @@ impl System {
             let mut targets =
                 self.target_selection(unit_by_id.values().cloned().collect::<Vec<Group>>());
             targets.sort_by_key(|(id, _)| -unit_by_id[id].initiative);
-            for (attacker, defender) in targets.iter_mut() {
-                if !unit_by_id.contains_key(attacker) || !unit_by_id.contains_key(defender) {
+            for (attacker, defender) in targets.iter() {
+                if !(unit_by_id.contains_key(attacker) && unit_by_id.contains_key(defender)) {
                     continue;
                 }
-                let mut attacker = unit_by_id[attacker].clone();
+                let attacker = unit_by_id[attacker].clone();
                 let mut defender = unit_by_id[defender].clone();
                 if attacker.units <= 0 {
                     unit_by_id.remove(&attacker.id);
@@ -92,7 +92,9 @@ impl System {
                     unit_by_id.remove(&defender.id);
                     continue;
                 }
-                attacker.attack(&mut defender);
+                let damage_dealt = attacker.calculate_damage(&defender);
+                let units_killed = damage_dealt / defender.hit_points;
+                defender.units = (defender.units - units_killed).max(0);
                 if defender.units <= 0 {
                     unit_by_id.remove(&defender.id);
                 } else {
@@ -114,8 +116,9 @@ impl System {
                 .into_iter()
                 .filter(|def| {
                     def.is_immune != atk.is_immune
-                        && !targeted.contains(&def.id)
+                        && def.units > 0
                         && atk.calculate_damage(def) > 0
+                        && !targeted.contains(&def.id)
                 })
                 .max_by_key(|def| {
                     (
