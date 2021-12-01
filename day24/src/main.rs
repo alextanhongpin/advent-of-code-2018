@@ -4,8 +4,7 @@ use std::collections::{HashMap, HashSet};
 fn main() {
     let input = include_str!("input.txt");
     let mut system = System::new(input);
-    // 18221 - 18250
-    assert_eq!(0, system.fight());
+    assert_eq!(18280, system.fight());
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq)]
@@ -39,12 +38,6 @@ impl Group {
     fn calculate_damage(&self, other: &Group) -> i32 {
         self.effective_power() * self.effectiveness(other)
     }
-
-    //fn attack(&mut self, other: &mut Group) {
-    //let damage = self.calculate_damage(other);
-    //let units = damage / other.hit_points;
-    //other.units = (other.units - units).max(0);
-    //}
 }
 
 struct System {
@@ -77,28 +70,20 @@ impl System {
             }
             let mut targets =
                 self.target_selection(unit_by_id.values().cloned().collect::<Vec<Group>>());
-            targets.sort_by_key(|(id, _)| -unit_by_id[id].initiative);
+            targets.sort_by_key(|(id, _)| (!unit_by_id[id].initiative));
             for (attacker, defender) in targets.iter() {
                 if !(unit_by_id.contains_key(attacker) && unit_by_id.contains_key(defender)) {
                     continue;
                 }
                 let attacker = unit_by_id[attacker].clone();
                 let mut defender = unit_by_id[defender].clone();
-                if attacker.units <= 0 {
-                    unit_by_id.remove(&attacker.id);
-                    continue;
-                }
-                if defender.units <= 0 {
-                    unit_by_id.remove(&defender.id);
-                    continue;
-                }
                 let damage_dealt = attacker.calculate_damage(&defender);
                 let units_killed = damage_dealt / defender.hit_points;
                 defender.units = (defender.units - units_killed).max(0);
-                if defender.units <= 0 {
-                    unit_by_id.remove(&defender.id);
-                } else {
+                if defender.units > 0 {
                     unit_by_id.insert(defender.id, defender);
+                } else {
+                    unit_by_id.remove(&defender.id);
                 }
             }
         }
@@ -109,8 +94,11 @@ impl System {
         let mut targeted = HashSet::new();
 
         let mut groups = groups;
-        groups.sort_by_key(|u| (-u.effective_power(), -u.initiative));
+        groups.sort_by_key(|u| (!u.effective_power(), !u.initiative));
         for atk in groups.iter() {
+            if atk.units <= 0 {
+                continue;
+            }
             let defender = groups
                 .clone()
                 .into_iter()
@@ -184,6 +172,7 @@ fn parse(input: &str) -> Vec<Group> {
 
         let immune_cap = immune_re.captures(line);
         if immune_cap.is_none() {
+            groups.push(group);
             continue;
         }
         let immune_cap = immune_cap.unwrap();
