@@ -135,12 +135,18 @@ function targetSelection(groups = []) {
   groups.sort((a, b) => {
     const aep = effectivePower(a);
     const bep = effectivePower(b);
-    return bep === aep ? b.initiative - a.initiave : bep - aep;
+    const sameEffectivePower = bep === aep;
+    const initiativeDesc = b.initiative - a.initiative;
+    const effectivePowerDesc = bep - aep;
+    return sameEffectivePower ? initiativeDesc : effectivePowerDesc;
   });
 
   const pairs = {};
   const selected = new Set();
   for (const group of groups) {
+    if (group.units <= 0) {
+      continue;
+    }
     const others = groups.filter((other) => {
       return (
         other.group != group.group &&
@@ -207,36 +213,29 @@ function hasGroup(groups = []) {
 
 function boostDamage(groups = [], boost = 0) {
   return groups.map((group) => {
-    group.damage += group.group === "IS" ? boost : 0;
+    if (group.group === "IS") {
+      group.damage += boost;
+    }
     return group;
   });
 }
 
 function execute(input, boost = 0) {
   let groups = boostDamage(parse(input), boost);
-  const seen = new Set();
   while (hasGroup(groups)) {
-    if (seen.has(stringify(groups))) {
-      console.log(groups);
-      throw new Error("ties");
-    }
-    seen.add(stringify(groups));
-
+    const unitsBefore = groups.reduce((acc, group) => acc + group.units, 0);
     const pairs = targetSelection(groups);
     const groupById = groups.reduce((acc, group) => {
       acc[group.id] = group;
       return acc;
     }, {});
     groups = fight(groupById, pairs);
+    const unitsAfter = groups.reduce((acc, group) => acc + group.units, 0);
+    if (unitsBefore === unitsAfter) {
+      return groups;
+    }
   }
   return groups;
-}
-
-function stringify(unknown) {
-  if (Array.isArray(unknown)) {
-    return unknown.map(stringify).toString();
-  }
-  return Object.entries(unknown).sort().toString();
 }
 
 function part1(input) {
@@ -244,20 +243,20 @@ function part1(input) {
   const unitsRemaining = groups.reduce((acc, group) => acc + group.units, 0);
   return unitsRemaining;
 }
+
 function immuneSystemWin(groups = []) {
   return groups.every((group) => group.group === "IS");
 }
+
 function part2(input) {
-  let min = 20;
-  groups = execute(input);
+  let boost = 0;
+  groups = execute(input, boost);
   while (!immuneSystemWin(groups)) {
-    min += 1;
-    try {
-      groups = execute(input, min);
-    } catch (error) {}
+    boost += 1;
+    groups = execute(input, boost);
   }
-  console.log(min, immuneSystemWin(groups));
   const unitsRemaining = groups.reduce((acc, group) => acc + group.units, 0);
+  console.log("boost: " + boost, "units", unitsRemaining);
   return unitsRemaining;
 }
 
@@ -273,7 +272,7 @@ function part2(input) {
     throw new Error("part2Error: got " + part2(example));
   }
 
-  if (part2(input) !== 4578) {
+  if (part2(input) !== 4573) {
     throw new Error("part2Error: got " + part2(input));
   }
 })();
